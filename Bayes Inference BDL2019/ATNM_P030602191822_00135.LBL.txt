@@ -1,0 +1,35 @@
+PDS_VERSION_ID               = PDS3                                           
+RECORD_TYPE                  = FIXED_LENGTH                                   
+RECORD_BYTES                 = 1024                                           
+^SPICE_KERNEL                = "ATNM_P030602191822_00135.BC"                  
+MISSION_NAME                 = "MARS EXPRESS"                                 
+SPACECRAFT_NAME              = "MARS EXPRESS"                                 
+DATA_SET_ID                  = "MEX-E/M-SPICE-6-V1.0"                         
+KERNEL_TYPE_ID               = CK                                             
+PRODUCT_ID                   = "ATNM_P030602191822_00135.BC"                  
+PRODUCT_CREATION_TIME        = 2008-09-12T09:51:21                            
+PRODUCER_ID                  = ESA_ESTEC                                      
+                                                                              
+MISSION_PHASE_NAME           = { "EV", "IC", "MC Phase 0", "MC Phase 1",      
+                "MC Phase 2", "MC Phase 3", "MC Phase 4", "MC Phase 5",       
+                "MC Phase 6", "MR Phase 1", "MR Phase 2", "MR Phase 3",       
+                "MR Phase 4", "MR Phase 5", "MR Phase 6", "MR Phase 7"        
+                               }                                              
+                                                                              
+PRODUCT_VERSION_TYPE         = PREDICT                                        
+START_TIME                   = 2003-06-03T00:55:27.614                        
+STOP_TIME                    = 2005-07-14T01:51:37.000                        
+SPACECRAFT_CLOCK_START_COUNT = "N/A"                                          
+SPACECRAFT_CLOCK_STOP_COUNT  = "N/A"                                          
+TARGET_NAME                  = "N/A"                                          
+INSTRUMENT_NAME              = "N/A"                                          
+NAIF_INSTRUMENT_ID           = -41001                                         
+SOURCE_PRODUCT_ID            = "ATNM_P030602191822_00135.BC"                  
+NOTE                         = "See comments in the file for details"         
+OBJECT                       = SPICE_KERNEL                                   
+  INTERCHANGE_FORMAT         = BINARY                                         
+  KERNEL_TYPE                = POINTING                                       
+  DESCRIPTION                = "CK kernel with predicted attitude for MEX.    
+(Run CKBRIEF on this file to see its time coverage). "                        
+END_OBJECT                   = SPICE_KERNEL                                   
+END                                                                           
