@@ -15,11 +15,6 @@ Created on Tue Sep 17 10:58:49 2019
 #ppsd = PPSD(datasd.stats, metadata=inv)
 #ppsd.add(sd)
 #ppsd.abs
-import unicodedata
-import math
-test = math.inf
-from obspy.signal.tf_misfit import plot_tfr
-import seaborn as sns
 
 
 def SPECPS(RL, xx, yy, rho, winL, T, prop):
@@ -50,7 +45,7 @@ if prop = 'R':
     TRL = []
     Phii = []
     vavg = 0
-    fi = 1/winL
+    fi = 1/winL# change for more spectra
     
     for i in range(len(t0)): 
         print(i)
@@ -67,7 +62,8 @@ if prop = 'R':
         Amin = min(p0)
         A0 = p0[0]
         At = p0[-1]
-        if abs(A0 - At)/abs(Amax - Amin):
+#amplitude
+        if abs(A0 - At)/abs(Amax - Amin)<1.0:
 #            A = max(abs(p0))
             h0 = 8
             b = 25            
@@ -89,6 +85,7 @@ if prop = 'R':
 #            plt.plot(pti)
 #        plot_tfr(pti, dt=dt, fmin=0, fmax=fi+winL*dt)
             pti += p0
+            
         else:
             if len(t0) > i+2:
                 ti2 = np.array(range(int(t), int(t0[i+2])))
@@ -175,6 +172,7 @@ if prop = 'R':
         
         plt.figure(),
         plt.subplot(211)
+
         plt.pcolor(X,Y,AL)        
         plt.title('Love wave grad')
         #inversion
@@ -203,28 +201,37 @@ if prop = 'R':
         RMSE1 = np.sqrt((Residule/np.mean(AR))**2)/len(AR)
 
 
-def PS(ref, rho, winL, T, prop):
+def PS(ref, winL, T, prop):
 #corner:5: fcp = 0.32*vs/rho  3 fcp = 1.53*vp/2pi*rho   
 #    n = np.linspace(0, T, len(ref))
 #    ref = y, T = Ty, prop = ''
     ref1 = ref
     freq = []
-    if T % winL > 0:
-        T = int(T/winL)*winL
+    if len(T) % winL > 0:
+        T = int(len(T)/winL)*winL
 #        ref = ref[0:T-1]
         ref = ref[0:int(T)]
     freq = np.fft.fftfreq(int(T))[0:int(T/2)]
     freq = freq[freq >= 0]
-    t0 = np.linspace(0, T-winL, int(len(ref)/winL))
+    t0 = np.linspace(0, T-winL, int(int(T)/winL))
     fmin = min(freq)
     fmax = max(freq)
+    
+    #Damping ratio kse
+    kse = 0.05    
+    wii = 2*np.pi/winL
+    m = 30/32.2 #mass of the frame kips per foot
+    c = 2*m*wii*kse
+    wd =wii*(1-kse**2)**0.5
     PT = []
     v = []
     vi = []
+    v2 = []#displcement
     k = []
     Vg = []
     x = []
-    a = []
+    a = []#speed
+    dv = []
     TP = []
     Phii = []
     vavg = 0
@@ -235,16 +242,19 @@ def PS(ref, rho, winL, T, prop):
         t = t0[i]
         pti = np.zeros((winL, 1))
         if i+1 < len(t0):
-            ti = np.array(range(int(t), int(t0[i+1])))
+            ti = range(int(t), int(t0[i+1]))
 #        else: break
         p0 = ref[ti]
-#        dt = (t0[i+1]-t)/winL
+        v0 = p0[0]
+        dv0 = p0[1] - p0[0]
+        wd = wii*(1-kse**2)**0.5
+        #        dt = (t0[i+1]-t)/winL
         Amax = max(p0)
         Amin = min(p0)
         A0 = p0[0]
         At = p0[-1]
         if abs(A0 - At)/abs(Amax - Amin) < 0.5:
-            A = max(abs(p0))            
+            A = max(abs(p0)) 
             pf = np.fft.fft(p0)
             wi= np.arctan(pf.real/pf.imag)
             Hi = (np.sign(ti-t)+1)/2
@@ -256,6 +266,7 @@ def PS(ref, rho, winL, T, prop):
 #            plt.plot(pti)
 #        plot_tfr(pti, dt=dt, fmin=0, fmax=fi+winL*dt)
             pti += p0
+
         else:
             if len(t0) > i+2:
                 ti2 = np.array(range(int(t), int(t0[i+2])))
@@ -284,6 +295,8 @@ def PS(ref, rho, winL, T, prop):
         if len(pti) < len(ti):
             ti = ti[0:len(pti)]
         vi = pti/(ti-t+0.000001)
+        vi2 = (v0*np.cos(wd*(ti-t))+((dv0+v0)*kse*wii/wd)*np.sin(wd*(ti-t)))*np.exp(-kse*wii*(ti-t))
+        print(vi- vi2)
 #            v = list(v)
 #        phii = list(phii)
         ki = wi[0:len(vi)]/ (vi+0.000001)
@@ -308,6 +321,7 @@ def PS(ref, rho, winL, T, prop):
                 Phii.append(wi)
                 phii = wi
                 v.append(vi)
+                v2.append(vi2)
                 k.append(phii/vi)
                 x.append(pti)
                 PT.append(pti)
@@ -316,21 +330,23 @@ def PS(ref, rho, winL, T, prop):
                 Phii1 = np.array(Phii)
                 k1 = np.array(k)
                 vg=(Phii1[i]-Phii1[i-1])/(k1[i]-k1[i-1])
-                ai = [vi[0]-v[i-1][-1],vi[1]-vi[0],vi[2]-vi[1],vi[3]-vi[2],vi[4]-vi[3]]
+#                ai = [vi[0]-v[i-1][-1],vi[1]-vi[0],vi[2]-vi[1],vi[3]-vi[2],vi[4]-vi[3]]
+                ai = [vi2[0]-v[i-1][-1],vi2[1]-vi2[0],vi2[2]-vi2[1],vi2[3]-vi2[2],vi2[4]-vi2[3]]
             else:
                 vg=np.array(Phii[i])/np.array(k[i])  
                 ai = []
-                ai.append(vi[0])
-            if len(vi) > 1:
-                for i in range(len(vi)-1):
-                    ai.append(vi[i+1]-vi[i])
+                ai.append(vi2[0])
+            if len(vi2) > 1:
+                for i in range(len(vi2)-1):
+ #                   ai.append(vi[i+1]-vi[i])
+                     ai.append(vi2[i+1]-vi2[i])
 #                    D.append(x)
-                    Vg.append(vg)
-                    TP.append(ti)
-                    a.append(ai)
+                     Vg.append(vg)
+                     TP.append(ti)
+                     a.append(ai)
         else:
             PT1 = PT
-            v1 = v
+            v1 = v2
             k1 = k
             Vg1 = Vg
             x1 = x
@@ -339,7 +355,7 @@ def PS(ref, rho, winL, T, prop):
             Phii1 = Phii
             vavg1 = vavg
             print([PT1,v1,k1,Vg1,x1,a1,TP1,Phii1,vavg1])
-            pti, vi, ki, vgi, xi, ai, ti, phii, vavg = PS(p0, rho, int(len(p0)/2), int(len(p0)), prop)
+            pti, vi, ki, vgi, xi, ai, ti, phii, vavg = PS(p0, int(len(p0)/2), int(len(p0)), prop)
             print([pti, vi, ki, vgi, xi, ai, ti, phii, vavg])
                 
             Phii.append(phii)
@@ -350,21 +366,34 @@ def PS(ref, rho, winL, T, prop):
             Vg.append(vgi)
             TP.append(ti)
             a.append(ai)
+            an = np.unique(a)
         if i == len(t0) - 1: break
 #    PT.merge(method = 1)
     if prop == 'P':
         PT = np.array(PT[:]).ravel()
         plt.figure(),
         plt.subplot(311)
-        plt.plot(PT)
+        plt.plot(np.array(PT).ravel())
         plt.ylabel('simulated Pwave')
-        plt.title(['residule:', np.mean(np.array(PT) - ref1[0:len(np.array(np.array(PT[:]).ravel()))])]) 
+        plt.title(['residule:', np.mean(np.array(PT).ravel() - ref1[0:len(np.array(np.array(PT[:]).ravel()))])]) 
         plt.subplot(312)
         plt.plot(ref1[0:len(np.array(np.array(PT[:]).ravel()))])
         plt.ylabel('original Pwave')
         plt.subplot(313)
-        plt.plot(np.array(PT) - ref1[0:len(np.array(np.array(PT[:]).ravel()))])  
+        plt.plot(np.array(PT).ravel() - ref1[0:len(np.array(np.array(PT[:]).ravel()))])  
         plt.ylabel('residule')
+        plt.tight_layout()
+        plt.figure(),
+        plt.subplot(311)
+        plt.plot(np.array(np.sum(a,axis = 0))[5:-1]-np.array(np.sum(a,axis = 0))[0:-6])
+        plt.title('Pwave accelerate')
+        plt.subplot(312)
+        plt.plot(np.array(v2).ravel())
+        plt.title('Pwave displacement')
+        plt.subplot(313)
+        plt.plot(np.sum(a,axis = 0))
+        plt.title('Pwave speed')
+        plt.tight_layout()
     #    plot_tf_misfits(np.array(np.array(PT[:]).ravel()), ref1[0:len(np.array(np.array(PT[:]).ravel()))], dt=1, fmin=fmin, fmax=fmax)
     #    vavg = freq*2*np.pi*rho[sum(np.array(np.array(x).ravel()))]/1.53
         vavg = freq*2*np.pi*sum(np.array(np.array(x).ravel()))/1.53
@@ -372,15 +401,27 @@ def PS(ref, rho, winL, T, prop):
         PT = np.array(PT[:]).ravel()
         plt.figure(),
         plt.subplot(311)
-        plt.plot(PT)
+        plt.plot(np.array(PT).ravel())
         plt.ylabel('simulated Swave')
-        plt.title(['residule:', np.mean(np.array(PT) - ref1[0:len(np.array(np.array(PT[:]).ravel()))])]) 
+        plt.title(['residule:', np.mean(np.array(PT).ravel() - ref1[0:len(np.array(np.array(PT[:]).ravel()))])]) 
         plt.subplot(312)
         plt.plot(ref1[0:len(np.array(np.array(PT[:]).ravel()))])
         plt.ylabel('original Swave')
         plt.subplot(313)
-        plt.plot(np.array(PT) - ref1[0:len(np.array(np.array(PT[:]).ravel()))])  
+        plt.plot(np.array(PT).ravel() - ref1[0:len(np.array(np.array(PT[:]).ravel()))])  
         plt.ylabel('residule')
+        plt.tight_layout()
+        plt.figure(),
+        plt.subplot(311)
+        plt.plot(np.array(np.sum(a,axis = 0))[4:-1]-np.array(np.sum(a,axis = 0))[0:-5])
+        plt.title('Swave accelerate')
+        plt.subplot(312)
+        plt.plot(np.array(v2).ravel())
+        plt.title('Swave displacement')
+        plt.subplot(313)
+        plt.plot(np.sum(a,axis = 0))
+        plt.title('Swave speed')
+        plt.tight_layout()
     #    plot_tf_misfits(np.array(np.array(PT[:]).ravel()), ref1[0:len(np.array(np.array(PT[:]).ravel()))], dt=1, fmin=fmin, fmax=fmax)
     #    vavg = freq*2*np.pi*rho[sum(np.array(np.array(x).ravel()))]/1.53
     #corner:6: fcs = 0.21*vs/rho
@@ -440,9 +481,9 @@ def Sf(x, y, z, rho, winL, Tx, Ty, Tz, iters):
         plt.title('Rayleigh wave grad')
         
         #3D
-        RT_3D, vl, kl, Vgl, xy, al, TL, PhiLi, vavgl = SPECPS_3D(xx, xy, rho, winL, Tx, 'L')
-        
-        
+        RT_3D, vl, kl, Vgl, xy, al, TL, PhiLi, vavgl = SPECPS(xx, xy, rho, winL, Tx, 'L')
+       
+       
         SD1, SD2, SR1, SR2, p1, p2 = evaluate(AR,AL)
         df = pd.DataFrame([SD1, SD2, SR1, SR2, p1, p2])
         plt.figure(),
@@ -574,6 +615,406 @@ def Sf(x, y, z, rho, winL, Tx, Ty, Tz, iters):
         )    
 
 
+def MCMC_1D_improved(x, winL, T, rho, fs, domain):
+#corner:5: fcp = 0.32*vs/rho  3 fcp = 1.53*vp/2pi*rho   
+#    n = np.linspace(0, T, len(ref))
+    if domain == 'time':
+        mode = 1
+        xx1 = x
+        T = int(len(xx1))
+        if T % winL > 0:
+            T = np.ceil(T/winL)*winL
+            xx = np.repeat(0.0, int(T))
+            xx[0:len(x)] = xx1
+            xx[int(len(x)+1):-1] = xx1[0:int(T-len(x)-1)]
+        else:
+            xx = x
+#    else:
+#        mode = 0
+#        T = int(len(xx1)/2)
+#        if T % winL > 0:
+#            T = np.ceil(T/winL)*winL
+#        freq = np.fft.fftfreq(int(T))
+#        px = np.fft.fft(x)[-len(freq)-1:-1]
+#        vx = x[np.array(np.linspace(0, len(xx1)-2, T),dtype = int)]
+
+#        Re = 6371
+#    WW = []
+#    for dw in dW:
+#    winL = dw/360*2*np.pi*Re               
+    t0 = np.linspace(0, T, np.ceil(T/winL)+1)
+    #    fmin = min(freq)
+    #    fmax = max(freq)
+    # Housner's design
+#   fundamental mode
+#    for kse in [0, 0.02, 0.05, 0.1]:
+#    S0 = 0.0063
+#    Tau = np.repeat(0,(len(t0)-1)* winL)
+#    Alpha =np.repeat(0.0,(len(t0)-1)* winL)
+    ACC = np.repeat(0.0,(len(t0)-1)* winL)
+#    Pti = np.repeat(0.0,(len(t0)-1)* winL)
+    Ve = np.repeat(0.0,(len(t0)-1)* winL)
+    Di =np.repeat(0.0,(len(t0)-1)* winL)
+#    AC = np.repeat(0,(len(t0)-1)* winL)
+    Amp = np.repeat(0.0,(len(t0)-1)* winL)
+    wii = 2*np.pi/winL 
+    w0 = 0
+    Spd = np.repeat(0.0, winL)
+    Spv= np.repeat(0.0, winL)
+    Spa = np.repeat(0.0, winL)
+    res = np.repeat(0.0, winL)    
+     #   fi = 1/winL# change for more spectra
+     #   fii = np.random.normal(fi, 0.01*fi, 5)
+    for tau in range(len(t0)-1): 
+        temp = 1000
+        print(tau)
+        t = t0[tau]
+        ti = np.array(range(int(t), int(np.ceil(t0[tau+1]))))
+#        if mode == 0:
+#            p0 = px[ti]
+        if mode == 1:
+            p0 = xx[ti]
+
+        dt = 1/fs
+
+        s0 = p0[0]
+        v0 = p0[1]-p0[0]- v0 
+        gamma = 1
+        fi = 1/winL
+        Amax = max(abs(p0))
+        Amin = min(p0)
+        if mode == 1:
+            wi= -np.arccos(p0/Amax)
+#        if mode == 0:
+#            wi = -np.arctan(p0.imag/p0.real)
+        vgi = wi[0]-w0
+        w0 = wi[0]
+        kse0 = 0
+        wd = wi*(1-kse0**2)**0.5
+#        if mode == 0:
+#            thetai =np.arcsin(vx[ti]/Amax)[-1]- np.arcsin(vx[ti]/Amax)[0]
+#            B = Amax**2/2*(1-(np.sin(2*thetai)*np.cos(2*w0*ti)-(1-np.cos(2*thetai))*np.sin(2*w0*ti))/(2*thetai))
+#            B_ =  B**0.5
+#            B_[B_*p0<0] = -B_[B_*p0<0]
+#            
+#            spv = np.repeat(0.0, winL)
+#            for n in range(len(ti)):
+#                pv = 0
+#                for w in wi:
+#                    tau = np.linspace(0, ti[n], (ti[n]+1)/dt)
+#                    if pv < abs(sum(np.sin(w*(ti[n]-tau))*dt*np.exp(-kse*(w*(ti[n]-dt))))):
+#                        pv = sum(np.sin(w*(ti[n]-tau))*dt*np.exp(-kse*(w*(ti[n]-dt))))
+#                spv[n] = np.max(pv*B_).real
+#    #            print(['Spv:', Spv])
+#
+#            multi = wd**2+(2*wd*kse0)**2/2*(np.cos(2*wd*ti))**2+kse0*wi*wd*np.cos(2*wd*ti)
+#            multi *= 1-np.exp(-2*wi*kse0*ti)/wd**2
+#            B_cor = abs(np.pi*wi*B_**0.5/(2*kse0*ki**2+0.000001)*multi)**0.5
+#    #            B_cor = B_cor**0.5
+#            B_cor[B_cor*p0 < 0] = -B_cor[B_cor*p0 < 0]
+#            
+#            Sum_B_cor = B_cor
+#            Spd = spv/wi
+#            Sum_Spd = spv/wi
+#            Spv = spv
+#            Sum_Spv = spv
+#            Spa = spv*wi
+#            Sum_Spa = spv*wi
+#            diff = sum(abs(B_cor - p0))
+        if mode == 1:
+#             alpha = p0/dt
+#            A0 = v0/wi**2 - 2*kse0*alpha/wi**3
+#            A1 = p0/dt/wi**2
+#            A2 = v0 - A0
+#            A3 = 1/wd*(w0+kse0*wi*A2-alpha/wi**2)
+#            spd = A0 + A1*ti + A2*np.exp(-kse0*wi*ti)*np.cos(wd*ti) + A3*np.exp(-kse0*wi*ti)*np.sin(wd*ti)
+#            spv = A1 +(wd*A3 - kse0*wi*A2)*np.exp(-kse0*wi*ti)*np.cos(wd*ti) - (wd*A2 + kse0*wi*A3)*np.exp(-kse0*wi*ti)*np.sin(wd*ti) 
+#            spa = A1 +(wd*A3 - kse0*wi*A2)*(-kse0*wi*np.exp(-kse0*wi*ti)*np.cos(wd*ti)-wd*ti*np.sin(wd*ti)*np.cos(wd*ti)) - (wd*A2 + kse0*wi*A3)*(-kse0*wi*np.exp(-kse0*wi*ti)*np.cos(wd*ti)-wd*ti*np.sin(wd*ti)*np.cos(wd*ti))
+#            Sum_Spd = spd
+#            Sum_Spv = spv
+#            Sum_Spa = spa
+#            Spd = spd
+#            Spv = spv
+#            Spa = spa
+#            diff = sum(abs(Spd - p0))
+             k0 = abs(p0[1]-p0[0])/dt
+             c0 = 60*4.45
+             fD = 0
+             fS = 0
+             m = 30*4.45
+             a = (p0[0] - fD - fS)/m
+             kd = k0 + 3*c0/dt +6*m/dt**2
+#             pd = m*a0 + k0*s0 +c0*v0 +m*(6*s0/dt**2 +6*v0/dt+2*a0) + c0*(3*v0/dt +2*v0+ a0*dt/2)
+             dpd = m*((6*ds/dt+3*dv)+c0*(3*ds+dt*dv/2))/kd 
+             ds = dpd/kd 
+             dv = 3*ds/dt -3*v0 -dt*a/2
+             Spd[0] = s0+ds
+             Spv[0] = v0+dv
+             Spa[0] = a
+             res[0] = abs(s0+ds-p0[1])/abs(p0[1])+abs(v0+dv-(p0[1]-p0[0])/dt)/abs((p0[1]-p0[0])/dt)            
+             for i in range(1, len(ti)):
+                 fD += c0*dv
+                 fS += k0*ds
+                 kd += 3*c0/dt +6*m/dt**2
+                 dpd += m*(6*s0/dt**2 +6*v0/dt+2*a0) + c0*(3*v0/dt +2*v0+ a0*dt/2)
+                 a = (p0[i] - fD - fS)/m 
+                 ds = dpd/kd 
+                 dv = 3*ds/dt -3*v0 -dt*a/2
+                 Spd[i] = p0[i-1]+ds
+                 Spv[i] = Spv[i-1]+dv
+                 Spa[i] = a
+                 res[i] = abs(p0[i-1]+ds-p0[i])/abs(p0[i])+abs(Spv[i-1]+dv-(p0[i]-p0[i-1])/dt)/abs((p0[i]-p0[i-1])/dt)
+
+        ksei = np.linspace(0, 1, 100)
+
+        temp = 1000
+        spd = np.repeat(0.0, winL)
+        spv= np.repeat(0.0, winL)
+        spa = np.repeat(0.0, winL)
+        for count in range(1, len(ksei)):
+            kse = ksei[len(ksei)-count]
+            print(count)
+            sigma1 = np.std(p0)
+#            if mode == 0:
+#                wi = -np.arctan(B_.imag/(_B.real+0.00000001))
+            if mode == 1:
+                wi = -np.arccos(Spd/max(abs(Spd)))
+                wi = np.nan_to_num(wi)+0.00000001
+                FD = fD
+                FS = fS
+                KD = kd
+                DS = ds
+                DV = dv
+                DPD = dpd 
+                Sum_Spd = Spd
+                Sum_Spa = Spa
+                Sum_Spv = Spv
+            wd = wi*(1-kse**2)**0.5
+#            print(sigma1)
+                #amplitude
+#            Ki = wii**2/rho[ti]
+#            Di = rho[ti]/Ki
+ #           vi = v0*wii**2*Di
+#            if mode == 0:
+#                a = a0*gamma
+#                alpha = wi*dt/vgi
+#                b_ = np.fft.ifft(B)/alpha 
+#
+##               Spv = -kse*b*np.sin(wi*(t-dt))*dt*np.exp(-kse*(wi*(t-dt)))+b*np.cos(wi*(t-dt))*dt*np.exp(-kse*(wi*(t-dt)))
+##                Sav = -wi*(2*kse**2-1)*b*np.sin(wi*(t-dt))*dt*np.exp(-kse*(wi*(t-dt)))-2*wi*kse*b*np.cos(wi*(t-dt))*dt*np.exp(-kse*(wi*(t-dt)))
+#                #pseudo
+#                spv = np.repeat(0.0, winL)
+#                for n in range(len(ti)):
+#                    pv = 0
+#                    for w in wi:
+#                        tau = np.linspace(0, ti[n], (ti[n]+1)/dt)
+#                        if pv < abs(sum(np.sin(w*(ti[n]-tau))*dt*np.exp(-kse*(w*(ti[n]-dt))))):
+#                            pv = sum(np.sin(w*(ti[n]-tau))*dt*np.exp(-kse*(w*(ti[n]-dt))))
+#                        spv[n] = np.max(pv*b_).real
+##            print(['Spv:', Spv])
+#                ki = wi/spv
+#                wd = wi*(1-kse**2)**0.5
+#                multi = wd**2+(2*wd*kse)**2/2*(np.cos(2*wd*ti))**2+kse*wi*wd*np.cos(2*wd*ti)
+#                multi *= 1-np.exp(-2*wi*kse*ti)//wd**2
+#                B_cor = abs(np.pi*wi*B**0.5/(2*kse*ki**2+0.000001)*multi)**0.5
+#                #            B_cor = B_cor**0.5
+#                B_cor[B_cor*p0 < 0] = -B_cor[B_cor*p0 < 0]
+#                if diff > sum(abs(B_cor - p0)):
+#                    B_ = B_cor
+#                    diff = sum(abs(B_cor - p0))
+#                    Spd = spv/(wi+0.0000000001)
+#                    Spa = wi*spv 
+#                    Spv = spv
+#                    Sum_B_cor += B_cor
+#                    Sum_Spd += spv/wi
+#                    Sum_Spa += wi*spv
+#                    Sum_Spv += spv
+#                if diff > sum(abs(Sum_B_cor/(count+1) - p0)):
+#                    B_ = Sum_B_cor/(count+1)
+#                    diff = sum(abs(Sum_B_cor/(count+1) - p0))
+#                    Spd = Sum_Spd/(count+1)
+#                    Spa = Sum_Spa/(count+1) 
+#                    Spv = Sum_Spv/(count+1)
+#
+#                Ampi = np.fft.fft(np.fft.ifft(B_))
+##            Ak = np.exp(-np.mean(abs(Ampi - p0)**2)/(2*sigma1**2+0.00001))
+#                Ak = np.mean(abs(Ampi - p0)/(sigma1**2+0.00001))
+#                print(Ak)
+#            #frequency
+#        #            Af = 0.3*abs(Amax)
+#        #            f0i = np.zeros((winL))
+#        #            if ti[-1] < len(freq):
+#        #                f0i = freq[ti]
+#        #            elif ti[0] <= len(freq):
+#        #                f0i[0:len(freq)-ti[0]] = np.array(freq[ti[0]:len(freq)])
+#        #                f0i[len(freq)-ti[0]:int(ti[-1]-len(freq)+2)] = np.array(freq[0: ti[-1]-len(freq)])
+#        #            else: break
+#        #            f0 = f0i[pf >= Af]
+#        #            f0mu = np.mean(f0)
+#        #            fki = f0i[ pti >= Af]
+##                if sum(Di*vi!=0) > 0:
+##                    fki = (v0/(Di*vi))**0.5       
+##                else:
+##                    fki = Di*vi
+##                fk = sum((fki - wii)**2) 
+#                phi = -np.arctan(Ampi.imag/(Ampi.real+0.0000001))
+#                sigma2 = np.std(wi)
+#                fki = abs(phi - wi)
+##            fk = np.exp(-np.mean(fki)/(2*sigma2**2+0.00001))
+#                fk = np.mean(fki/(sigma2+0.00001))               
+##            print(fk)
+#
+##            pf = acc/count
+##            print(pf)
+##            print(abs(Ak + fk))
+#                if abs(Ak + fk) < temp:
+#                    temp = abs(Ak + fk)
+#                    print(['temp:',temp])
+#                if temp <= 1:
+#                    print(['range:',range(i*winL,i*winL+winL)])
+#                    ACC[i*winL:i*winL+winL] = Spa
+#                    Alpha[i*winL:i*winL+winL] = alpha
+##                Tau[i*winL:i*winL+winL] = tau/count
+#                    Ve[i*winL:i*winL+winL] = Spv
+#                    Di[i*winL:i*winL+winL] = Spd
+#                    Amp[i*winL:i*winL+winL] = spd
+#                    print(['Spd:',Spd, 'D', Di])
+#                    print(['Spa:',Spa, 'Accelerte', ACC])
+#                    print(['alpha:',alpha, 'Alpha', Alpha])
+#                    break
+            if mode == 1:
+                for i in range(winL):
+    #                 alpha = Spd/dt
+    #                 A0 = v0/wi**2 - 2*kse*p0/dt/wi**3
+    #                 A1 = Spd/dt/wi**2
+    #                 A2 = v0 - A0
+    #                 A3 = 1/wd*(w0+kse*wi*A2-alpha/wi**2)
+    #                 spd = A0 + A1*ti + A2*np.exp(-kse*wi*ti)*np.cos(wd*ti) + A3*np.exp(-kse*wi*ti)*np.sin(wd*ti)
+    #                 spv = A1 +(wd*A3 - kse*wi*A2)*np.exp(-kse*wi*ti)*np.cos(wd*ti) - (wd*A2 + kse*wi*A3)*np.exp(-kse*wi*ti)*np.sin(wd*ti) 
+    #                 spa = A1 +(wd*A3 - kse*wi*A2)*(-kse*wi*np.exp(-kse*wi*ti)*np.cos(wd*ti)-wd*ti*np.sin(wd*ti)*np.cos(wd*ti)) - (wd*A2 + kse*wi*A3)*(-kse*wi*np.exp(-kse*wi*ti)*np.cos(wd*ti)-wd*ti*np.sin(wd*ti)*np.cos(wd*ti))
+                    if i ==0:
+                        ds = DS
+                        dv = DV
+                    FD -= c0*kse*ds
+                    FS -= k0*dv
+                    KD -= 3*c0*kse/dt +6*m/dt**2
+#                    DPD -= (1-(count-1))*m*(6*s0/dt**2 +6*kse*v0/dt+2*a0) + c0*kse*(3*v0/dt +2*v0+ a0*dt/2)
+                    DPD -= m*(6*s0/dt**2 +6*v0/dt+2*a0) + c0*kse*(3*v0/dt +2*v0+ a0*dt/2)
+                    a = kse*(p0[i] - FD - FS)/m 
+                    ds = DPD/KD 
+                    dv = kse*ds/dt -3*v0 -dt*a/2
+#                    dv = 3*ds/dt -3*v0 -dt*a0/2
+            
+                    spd[i] = p0[i-1]+ds
+                    spv[i] = Spv[i-1]+dv
+                    spa[i] = a
+                    if res[i] > abs(p0[i-1]+DS-p0[i])/abs(p0[i])+abs(spv[i-1]+dv-(p0[i]-p0[i-1])/dt)/abs((p0[i]-p0[i-1])/dt):
+                        res[i] = abs(p0[i-1]+DS-p0[i])/abs(p0[i])+abs(spv[i-1]+dv-(p0[i]-p0[i-1])/dt)/abs((p0[i]-p0[i-1])/dt)
+                        Sum_Spd[i] += spd[i]
+                        Sum_Spa[i] += spa[i]
+                        Sum_Spv[i] += spv[i]
+                    if res[i] > abs(Sum_Spd[i]/(count+1) - p0[i]):
+                        res[i] = abs(Sum_Spd[i]/(count+1) - p0[i])
+                        Spd[i] = Sum_Spd[i]/(count+1)
+                        Spa[i] = Sum_Spa[i]/(count+1) 
+                        Spv[i] = Sum_Spv[i]/(count+1)
+                        Sum_Spd[i] += Spd[i]-spd[i]
+                        Sum_Spa[i] += Spa[i]-spa[i]
+                        Sum_Spv[i] += Spv[i]-spv[i]
+                        
+            Ampi = Spd
+    #            Ak = np.exp(-np.mean(abs(Ampi - p0)**2)/(2*sigma1**2+0.00001))
+            Ak = np.mean(abs(Ampi - p0)/(sigma1**2+0.00001))
+            print(Ak)
+                #frequency
+            #            Af = 0.3*abs(Amax)
+            #            f0i = np.zeros((winL))
+            #            if ti[-1] < len(freq):
+            #                f0i = freq[ti]
+            #            elif ti[0] <= len(freq):
+            #                f0i[0:len(freq)-ti[0]] = np.array(freq[ti[0]:len(freq)])
+            #                f0i[len(freq)-ti[0]:int(ti[-1]-len(freq)+2)] = np.array(freq[0: ti[-1]-len(freq)])
+            #            else: break
+            #            f0 = f0i[pf >= Af]
+            #            f0mu = np.mean(f0)
+            #            fki = f0i[ pti >= Af]
+    #                if sum(Di*vi!=0) > 0:
+    #                    fki = (v0/(Di*vi))**0.5       
+    #                else:
+    #                    fki = Di*vi
+    #                fk = sum((fki - wii)**2) 
+            phi = -np.arccos(Ampi/max(abs(Ampi)+0.0000001))
+            sigma2 = np.std(wi)
+            fki = abs(phi - wi)
+    #            fk = np.exp(-np.mean(fki)/(2*sigma2**2+0.00001))
+            fk = np.mean(fki/(sigma2+0.00001))
+    #            print(fk)
+    
+    #            pf = acc/count
+    #            print(pf)
+    #            print(abs(Ak + fk))
+            if abs(Ak + fk) < temp:
+                temp = abs(Ak + fk)
+                print(['temp:',temp])
+            if temp <= 1:
+                print(['range:',range(tau*winL,tau*winL+winL)])
+                ACC[tau*winL:tau*winL+winL] = Spa
+#                Alpha[tau*winL:tau*winL+winL] = alpha
+    #                Tau[i*winL:i*winL+winL] = tau/count
+                Ve[tau*winL:tau*winL+winL] = Spv
+                Di[tau*winL:tau*winL+winL] = Spd
+                Amp[tau*winL:tau*winL+winL] = Spd
+                print(['Spd:',Spd, 'D', Di])
+                print(['Spa:',Spa, 'Accelerte', ACC])
+#                print(['alpha:',alpha, 'Alpha', Alpha])
+                break
+            
+#    if mode == 0:
+#        plt.figure(),
+#        plt.subplot(311)
+#        plt.plot(Amp[0:len(px)])
+#        plt.ylabel('simulated spectrum density')
+#        plt.ylim(min(px)-10, max(px)+10) 
+#        plt.title(['residule:', np.mean(Amp[0:len(px)] - px)]) 
+#        plt.subplot(312)
+#        plt.plot(px)
+#        plt.ylabel('original wave')
+#        plt.subplot(313)
+#        plt.plot(Amp[0:len(px)] - px)
+#        plt.ylabel('residule')
+#        #plt.ylabel('residule')
+    if mode == 1:
+        plt.figure(),
+        plt.subplot(311)
+        plt.plot(Amp[0:len(xx)])
+        plt.ylabel('simulated spectrum density')
+        plt.ylim(min(xx)-3*np.std(xx), max(xx)+3*np.std(xx)) 
+        plt.title(['residule:', np.mean(Amp[0:len(xx)] - xx)]) 
+        plt.subplot(312)
+        plt.plot(xx)
+        plt.ylabel('original wave')
+        plt.subplot(313)
+        plt.plot(Amp[0:len(xx)] - xx)
+        plt.ylabel('residule')
+    
+    plt.figure(),    
+    plt.subplot(311)
+    plt.plot(ACC)
+    plt.ylabel('accelerate of spectrum')
+
+        #        plt.ylim(min(px)-10, max(px)+10) 
+    plt.title('spectrum deterministic quntities:') 
+    plt.subplot(312)
+    plt.plot(Ve)
+    plt.ylabel('velocity')
+
+    plt.subplot(313)
+    plt.plot(Di)
+    plt.ylabel('displacement')
+
+        
+    return Amp[0:len(px)], Amp[0:len(px)] -  px, ACC, Ve, Di         
+                
 def evaluate(P1,P2,Pref,title1, title2, title3):
     P1 = np.array(P1)
     P2 = np.array(P2) 
@@ -890,9 +1331,199 @@ def MCMC_Amp(data, iters):
     mean2_ = Mean2   
     SD1N,SD2N,SR1N,SR2N = evaluate([abs(bins_), mu_, sigma_], [y2*10**8, mu2_, sigma2_], [bins, mu, sigma], ' with: mu, sigma being: ', 'Amplitude comp Gaussian and ref' , 'Amplitude comp Gaussian and log ')    
 
+def v_rho_r(ri, r, u, du, v, dv, w, vp_, vs_,a,l):
+    data = r[:, ri]
+    Pv = []
+    Sv = []
+    RR = []
+    EE = []
+    W2 = []
+    r0 = 0
+    for i in range(np.shape(data)[1]):
+        rr = data[:, i]
+        rr = rr[rr != 0,]
+#        rho = rho_[r0:r0+len(rr)]
+        print(rr)
+#        r0 = len(rr)
+#        C_ = du[rr!=0,]*du[rr!=0,]
+        C_ = du[r0:r0+len(rr),]*du[r0:r0+len(rr),]
+        A_ = np.repeat(rr**(-2), np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])*2*du[r0:r0+len(rr),] - l*(l+1)*(dv[r0:r0+len(rr),]+u[r0:r0+len(rr),]-v[r0:r0+len(rr),])/(v[r0:r0+len(rr),]+0.00001)**2
+        F_ = np.repeat(2*rr**(-1),np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])*du[r0:r0+len(rr),]*(2*u[r0:r0+len(rr),]-l*(l+1)*v[r0:r0+len(rr),])
+        L_ = l*(l+1)*np.repeat(rr**(-1), np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])*(dv[r0:r0+len(rr),] + u[r0:r0+len(rr),] - v[r0:r0+len(rr),])**2
+        N_ = np.repeat(rr**(-2),np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])*(l+2)*(l+1)*l*(l-1)*v[r0:r0+len(rr),]**2-(2*u[r0:r0+len(rr),]-l*(l+1)*v[r0:r0+len(rr),])**2
+        eta = F_/(A_ - 2*L_+0.000001)
+        
+#        C_ = C_[C_!= 0]
+#        A_ = A_[A_!= 0]
+#        F_ = F_[F_!= 0]
+#        L_ = L_[L_!= 0]
+#        N_ = N_[N_!= 0]
+#        eta = eta[eta != 0]
+        dA_ = A_
+        dA_[1:-1] = A_[1:-1]-A_[0:-2]
+        dC_ = C_
+        dC_[1:-1] = C_[1:-1]-C_[0:-2]
+        dF_ = F_
+        dF_[1:-1] = F_[1:-1]-F_[0:-2]
+        dL_ = L_
+        dL_[1:-1] = L_[1:-1]-L_[0:-2]
+        dN_ = N_
+        dN_[1:-1] = N_[1:-1]-N_[0:-2]
+        if i == 12:
+            print(i)
+            Vpv1 = 11.2622 - 6.3640*rr/a+5.5242*rr**2/a**2
+            Vph1 = 11.2622 - 6.3640*rr/a+5.5242*rr**2/a**2
+            Vsv1 = 3.6678 - 4.4475*rr**2/a**2
+            Vsh1 = 3.6678 - 4.4475*rr**2/a**2
+            rho = 13.0885-8.8381**rr**2/a**2
+        if i == 11:
+            print(i)
+            Vpv1 = 12.5815 - 1.2638*rr/a-3.6426*rr**2/a**2-5.5281*rr**3/a**3
+            Vph1 = 12.5815 - 1.2638*rr/a-3.6426*rr**2/a**2-5.5281*rr**3/a**3
+            Vsv1 = np.repeat(0, len(rr))
+            Vsh1 = np.repeat(0, len(rr))
+            rho = 12.5815-1.2638*rr/a-3.6426*rr**2/a**2-5.5281*rr**3/a**3        
+        if i == 10:
+            print(i)
+            Vpv1 = 15.3891 - 5.3181*rr/a+5.5242*rr**2/a**2-2.5514*rr**3/a**3
+            Vph1 = 15.3891 - 5.3181*rr/a+5.5242*rr**2/a**2-2.5514*rr**3/a**3
+            Vsv1 = 6.9254 + 1.4672*rr/a-2.0834*rr**2/a**2+0.9783*rr**3/a**3
+            Vsh1 = 6.9254 + 1.4672*rr/a-2.0834*rr**2/a**2+0.9783*rr**3/a**3
+            rho = 7.9656-6.4761*rr/a+5.5283*rr**2/a**2-3.0807*rr**3/a**3
+        if i == 9:
+            print(i)
+            Vpv1 = 24.9520 - 40.4673*rr/a+51.4832*rr**2/a**2-26.6419*rr**3/a**3
+            Vph1 = 24.9520 - 40.4673*rr/a+51.4832*rr**2/a**2-26.6419*rr**3/a**3
+            Vsv1 = 11.1671 - 13.7818*rr/a+17.4575*rr**2/a**2-9.2777*rr**3/a**3
+            Vsh1 = 11.1671 - 13.7818*rr/a+17.4575*rr**2/a**2-9.2777*rr**3/a**3
+            rho = 7.9656-6.4761*rr/a+5.5283*rr**2/a**2-3.0807*rr**3/a**3
+        if i == 8:
+            print(i)
+            Vpv1 = 29.2766 - 23.6027*rr/a+5.5242*rr**2/a**2-2.5514*rr**3/a**3
+            Vph1 = 29.2766 - 23.6027*rr/a+5.5242*rr**2/a**2-2.5514*rr**3/a**3
+            Vsv1 = 22.3459 - 17.2473*rr/a-2.0834*rr**2/a**2+0.9783*rr**3/a**3
+            Vsh1 = 22.3459 - 17.2473*rr/a-2.0834*rr**2/a**2+0.9783*rr**3/a**3
+            rho = 7.9656-6.4761*rr/a+5.5283*rr**2/a**2-3.0807*rr**3/a**3
+        if i == 7:
+            print(i)
+            Vpv1 = 19.0957 - 9.8672*rr/a
+            Vph1 = 19.0957 - 9.8672*rr/a
+            Vsv1 = 9.9839 - 4.9324*rr/a
+            Vsh1 = 9.9839 - 4.9324*rr/a
+            rho = 5.3197-1.4836*rr/a
+        if i == 6:
+            print(i)
+            Vpv1 = 39.7027 - 32.6166*rr/a
+            Vph1 = 39.7027 - 32.6166*rr/a
+            Vsv1 = 22.3512 - 18.5856*rr/a
+            Vsh1 = 22.3512 - 18.5856*rr/a
+            rho = 11.2494-8.0298*rr/a
+        if i == 5:
+            print(i)
+            Vpv1 = 20.3926 + 8.9496*rr/a
+            Vph1 = 20.3926 + 8.9496*rr/a
+            Vsv1 = 8.9496 - 4.4597*rr/a
+            Vsh1 = 8.9496 - 4.4597*rr/a
+            rho = 7.1089+3.8045*rr/a
+        if i in [3, 4]:# with symmetry axis
+            print(i)
+            Vpv1 = 4.1875 + 3.9382*rr/a
+            Vph1 = 4.1875 + 3.9382*rr/a
+            Vsv1 = 2.1519 + 2.3481*rr/a
+            Vsh1 = 2.1519 + 2.3481*rr/a
+            rho = 2.691+0.6924*rr/a
+        if i in [1, 2]:
+            print(i)
+            Vpv1 = 4.1875 + 3.9382*rr/a
+            Vph1 = 4.1875 + 3.9382*rr/a
+            Vsv1 = 2.1519 + 2.3481*rr/a
+            Vsh1 = 2.1519 + 2.3481*rr/a
+            if i == 1:
+                rho = np.repeat(2.6, len(rr))
+            else:
+                rho = np.repeat(2.9, len(rr))
+        if i == 0:
+            Vpv1 = np.repeat(1.45, len(rr))
+            Vsv1 = np.repeat(0, len(rr))
+            Vph1 = np.repeat(1.45, len(rr))
+            Vsh1 = np.repeat(0, len(rr))
+            rho = np.repeat(1.020, len(rr))
+#        rho = np.repeat(rho, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])
+        r0 = len(rr)
+        print(rho)
+        print(rr)
+        print(Vph1)
+        A = rho*Vph1**2
+        C = rho*Vpv1**2 
+        N = rho*Vsh1**2
+        L = rho*Vsv1**2 
+        
+#        rho_ = np.repeat(rho, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])
+        drho_ = rho/10**15
+        drho_[1:-1] = rho[1:-1] - rho[0:-2]
+        drho_ = np.repeat(drho_, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])
+#        A = np.repeat(A, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])        
+#        C = np.repeat(C, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])
+#        N = np.repeat(N, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])        
+#        L = np.repeat(L, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])
+        print(np.shape(A))
+        print(A)
+        A = np.repeat(A, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])        
+        C = np.repeat(C, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])
+        N = np.repeat(N, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])        
+        L = np.repeat(L, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])
+        F = eta*(A-2*L)
+        if sum(sum(A!=0)) != 0:
+            A = A[A != 0]
+        if sum(sum(C!=0)) != 0:
+            C = C[C != 0]
+        if sum(sum(N!=0)) != 0:
+            N = N[N != 0]
+        if sum(sum(L!=0)) != 0:
+            L = L[L != 0]
+        dA = A
+        dA[1:-1] = A[1:-1]-A[0:-2]
+        dC = C
+        dC[1:-1] = C[1:-1]-C[0:-2]
+        dN = N
+        dN[1:-1] = N[1:-1]-N[0:-2]
+        dL = L
+        dL[1:-1] = L[1:-1]-L[0:-2]
+        dF = F
+        dF[1:-1] = F[1:-1]-F[0:-2]
+        
+        R_ = -0.5*np.repeat(rr**2, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])* np.repeat( a + np.dot(Vpv1**2, C_) + np.dot(Vph1**2,(A_ + eta*F_)) + np.dot(Vsv1**2,(L_ - 2*eta*F_)) + np.dot(Vsh1**2, N_), len(rr)).reshape(len(rr), np.shape(u)[1])
+        pv = -np.repeat(rr**2*rho, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])* np.repeat(np.dot(Vpv1, C_), len(rr)).reshape(len(rr), np.shape(v)[1])
+        ph = -np.repeat(rr**2*rho,  np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])* np.repeat(np.dot(Vph1, A_ + eta*F_), len(rr)).reshape(len(rr), np.shape(v)[1])
+        sv = -np.repeat(rr**2*rho, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])*np.repeat(np.dot(Vsv1,(L_ - 2*eta*F_)), len(rr)).reshape(len(rr), np.shape(v)[1])
+        sh = -np.repeat(rr**2*rho, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])*np.repeat(np.dot(Vsh1, N_),len(rr)).reshape(len(rr), np.shape(v)[1])
+        pv[pv==0] += vp_[0]*10**21
+        ph[ph==0] += vp_[0]*10**21
+        sv[sv==0] += vs_[0]*10**21
+        sh[sh==0] += vs_[0]*10**21
+        E_ = -np.repeat(0.5*rr**2*rho*(Vph1**2 - 2*Vsv1**2), np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])* F_
+#        R_ = R_[R_ != 0]
+#        pv = pv[pv != 0]
+#        ph = ph[ph != 0]
+#        sv = sv[sv != 0]
+#        sh = sh[sh != 0]
+#        E_ = E_[E_ != 0]
+    
+        dw2w2 = np.repeat(rr**3, np.shape(u)[1]).reshape(len(rr), np.shape(u)[1])*(dA_*A.reshape(len(rr), np.shape(u)[1])+dC.reshape(len(rr), np.shape(u)[1])*C_+dF.reshape(len(rr), np.shape(u)[1])*F_+dL.reshape(len(rr), np.shape(u)[1])*L_+dN.reshape(len(rr), np.shape(u)[1])*N_+drho_*R_.reshape(len(rr), np.shape(u)[1]))
+        
+        Pv.append(np.nan_to_num((pv**2+ph**2)**(0.5)))
+        Sv.append(np.nan_to_num((sv**2+sh**2)**(0.5)))
+        RR.append(R_)
+        EE.append(E_)
+        W2.append(dw2w2)   
+        if i == np.shape(data)[1]-1:
+            print(i)
+            break
+    return Pv, Sv, W2, RR, EE  
+
 
 #rupture data
-import obspy
+#iport obspy
 from obspy import read
 from obspy import *
 import matplotlib.pyplot as plt
@@ -902,6 +1533,8 @@ import scipy.special as sps
 import pandas as pd
 from obspy.signal.trigger import ar_pick
 from obspy.signal.tf_misfit import plot_tf_misfits
+
+
 
 #st = read('http://examples.obspy.org/RJOB_061005_072159.ehz.new')
 #data = st[0]
@@ -1133,22 +1766,27 @@ plt.plot((du4/TR4).real)
     
     #T=range()
     #Amplitude   
+
 MCMC_Amp(datf, 1000)   
 rho = [np.linspace(2.21*10**15, 3*10**15, 30).ravel(), np.linspace(3.4*10**15, 4.4*10**15, 720).ravel(), np.linspace(4.4*10**15, 5.6*10**15, 2171).ravel(), np.linspace(9.9*10**15, 12.2*10**15, 2259).ravel(), np.linspace(12.8*10**15, 13.1*10**15, 1221).ravel()]
-T = range(int(p*fs),int(p*fs+(s-p)*fs))
-winL = int(len(T)/24)
-#PT,v,k,Vg,x,a,TP,Phii,varg=P(Pwave, rho, winL, len(T))
-PT, xp, vp, kp, Vgp, vavgp, TP  = PS(dataz[T], rho, winL, len(T),'P')
+T = range(int(p*fs),int(s*fs+3*(s-p)*fs))
+#winL = int(len(T)/24)
+winL = int(fs)
+#PT,v,k,Vg,x,a,TP,Phii,varg=P(Pwave, rho, winL, len(T))    m
+PT, xp, vp, kp, Vgp, vavgp, TP  = PS(dataz[T], winL, len(T),'P')
 
 T = range(int(s*fs+1), int(s*fs+3*(s-p)*fs))
 ref = Swave - PT[(s-p)*fs+1: int(s*fs+3*(s-p)*fs)]
+MCMC_1D_improved(dataz[T], 6, T, rho_, fs)
+
+
 #freq = np.fft.fft(ref) 
 #w = np.arctan(np.real(freq) / (np.imag(freq)+0.0001))
 #ST, xs, vs, ks, vgs, vavgs, TS = PS(ref, rho, winL, len(T),'S')
 #D = max(DP,DS)
 Tbody = int((s-p)*fs) + TS
 Sf(datasete[int(s*fs+3*(s-p)*fs+1):int(s*fs+(3*(s-p)+6)*fs+1)], datasetn[int(s*fs+3*(s-p)*fs+1):int(s*fs+(3*(s-p)+6)*fs+1)], datasetz[int(s*fs+3*(s-p)*fs+1):int(s*fs+(3*(s-p)+6)*fs+1)], rho, 5, 3*fs, 3*fs, 3*fs, 25)
-SPECP()
+
 
 refx = datasete.filter('highpass', freq=1.6, corners=5, zerophase=True) 
 freqx = np.fft.fft(refx) 
@@ -1160,5 +1798,123 @@ refz = datasete.filter('highpass', freq=1.6, corners=5, zerophase=True)
 freqz = np.fft.fft(refz) 
 wz = np.arctan(np.real(freqz) / (np.imag(freqz)+0.0001))
 
+######################normal mode
+a = 6371
+l = 11
+
+r = np.zeros((7504, 13))
+u = np.zeros((len(datasetz), 3))
+u[:,0] = datasetz
+v = np.zeros((len(datasetz), 3))
+v[:,1] = datasetn
+w = np.zeros((len(datasetz), 3))
+w[:,2] = datasete
+#url: ds.iris.edu/ds/products/emc-earthmodels
+#u = sp.Symbol('u')
+#v = sp.Symbol('v')
+
+du= u
+dv= v
+dw= w
+
+du[1:-1] = u[1:-1]-u[0:-2]
+dv[1:-1] = v[1:-1]-v[0:-2]
+dw[1:-1] = w[1:-1]-w[0:-2]
+
+rin = np.linspace(0, 1221.5, 1222)
+r[range(0, 1222), 0] = rin
+rout = np.linspace(1221.5, 3480, 3480-1222)
+r[range(1222-1222, 3480-1222), 1] = rout
+rlow1 = np.linspace(3480, 3630, 3630-3480)
+r[range(3480-3480, 3630-3480), 2] = rlow1
+rlow2 = np.linspace(3630, 5600, 5600-3630)
+r[range(3630-3630, 5600-3630), 3] = rlow2
+rlow3 = np.linspace(5600, 5701, 5701-5600)
+r[range(5600-5600, 5701-5600), 4] = rlow3 
+rtr1 = np.linspace(5701, 5771, 5771-5701)
+r[range(5701-5701, 5771-5701), 5] = rtr1
+rtr2 = np.linspace(5771, 5971, 5971-5771)
+r[range(5771-5771, 5971-5771), 6] = rtr2
+rtr3 = np.linspace(5971, 6151, 6151-5971)
+r[range(5971-5971, 6151-5971), 7] = rtr3
+rlvz = np.linspace(6151, 6291, 6291-6151)
+r[range(6151-6151, 6291-6151), 8] = rlvz 
+rlid = np.linspace(6292, 6347, 6347-6292)
+r[range(6292-6292, 6347-6292), 9] = rlid 
+rcrust1 = np.linspace(6347, 6356, 6356-6347)
+r[range(6347-6347, 6356-6347), 10] = rcrust1 
+rcrust2 = np.linspace(6356, 6368, 6368-6356)
+r[range(6356-6356, 6368-6356), 11] = rcrust2 
+rocean = np.linspace(6368, 6371, 6371-6368)
+r[range(6368-6368, 6371-6368), 12] = rocean
 
 
+ri = np.array(np.linspace(12, 8, 5), dtype = 'int')# 9.LVZ, 10.LID, 11.Crust, 12.Ocean 
+ri_ = np.array(np.linspace(12, 0, 13), dtype = 'int')# 9.LVZ, 10.LID, 11.Crust, 12.Ocean 
+
+SAW642ANB = pd.read_csv('D:/TUT/Medical/biophysics/experiment/bayes/Bayes/Bayes Inference/samples/SAW642ANB_kmps.csv', sep = '|',header =1, skiprows = 67)
+data = np.array(SAW642ANB)
+rho_ = data[data[:,1]==0, 5]
+depth_ = data[data[:,1]==0, 2]
+vs_= data[data[:,1]==0, 3]
+vp_= data[data[:,1]==0, 4]
+Pv, Sv, dw2w2, RR, EE = v_rho_r(ri_, r, u, du, v, dv, w, vp_, vs_, a, l)
+plt.figure,
+plt.subplot(2,2,1)
+plt.plot(depth_[depth_<=(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4]))], vp_[depth_<= (len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4]))], 'r')
+plt.subplot(2,2,2)
+plt.plot(depth_[depth_<=(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4]))], vs_[depth_<= (len(Sv[0])+len(Pv[1])+len(Sv[2])+len(Sv[3])+len(Pv[4]))], 'k')
+plt.subplot(2,2,3)
+plt.plot(range(len(Pv[0])), Pv[0], 'r-', range(len(Pv[0]),len(Pv[0])+len(Pv[1])), Pv[1], 'r-', range(len(Pv[0])+len(Pv[1]), len(Pv[0])+len(Pv[1])+len(Pv[2])), Pv[2], 'r-', range( len(Pv[0])+len(Pv[1])+len(Pv[2]),  len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])), Pv[3], 'r-', range( len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])), Pv[4], 'r-')
+plt.subplot(2,2,4)
+plt.plot(range(len(Sv[0])), Sv[0], 'k-', range(len(Sv[0]),len(Sv[0])+len(Sv[1])), Sv[1], 'k-', range(len(Sv[0])+len(Sv[1]), len(Sv[0])+len(Sv[1])+len(Sv[2])), Sv[2], 'k-', range(len(Sv[0])+len(Sv[1])+len(Sv[2]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])), Sv[3], 'k-', range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])), Sv[4], 'k-')
+
+plt.figure,
+plt.subplot(2,2,1)
+plt.plot(depth_[depth_<=(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])+len(Pv[12]))], vp_[depth_<= (len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])+len(Pv[12]))], 'r')
+plt.subplot(2,2,2)
+plt.plot(depth_[depth_<=(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])+len(Sv[12]))], vs_[depth_<= (len(Sv[0])+len(Pv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])+len(Sv[12]))], 'k')
+plt.subplot(2,2,3)
+plt.plot(range(len(Pv[0])), Pv[0][:,0], 'ro', range(len(Pv[0]),len(Pv[0])+len(Pv[1])), Pv[1][:,0], 'ro', range(len(Pv[0])+len(Pv[1]), len(Pv[0])+len(Pv[1])+len(Pv[2])), Pv[2][:,0], 'ro', range( len(Pv[0])+len(Pv[1])+len(Pv[2]),  len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])), Pv[3][:,0], 'ro', range( len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])), Pv[4][:,0], 'ro',  range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])), Pv[5][:,0], 'ro',  range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])), Pv[6][:,0], 'ro', range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])), Pv[7][:,0], 'ro', range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])), Pv[8][:,0], 'ro', range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])), Pv[9][:,0], 'ro', range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])), Pv[10][:,0], 'ro', range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])), Pv[11][:,0], 'ro', range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])+len(Pv[12])), Pv[12][:,0], 'ro')
+plt.subplot(2,2,4)
+plt.plot(range(len(Sv[0])), Sv[0][:,0], 'ko', range(len(Sv[0]),len(Sv[0])+len(Sv[1])), Sv[1][:,0], 'ko', range(len(Sv[0])+len(Sv[1]), len(Sv[0])+len(Sv[1])+len(Sv[2])), Sv[2][:,0], 'ko', range( len(Sv[0])+len(Sv[1])+len(Sv[2]),  len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])), Sv[3][:,0], 'ko', range( len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])), Sv[4][:,0], 'ko',  range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])), Sv[5][:,0], 'ko',  range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])), Sv[6][:,0], 'ko', range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])), Sv[7][:,0], 'ko', range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])), Sv[8][:,0], 'ko', range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])), Sv[9][:,0], 'ko', range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])), Sv[10][:,0], 'ko', range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])), Sv[11][:,0], 'ko', range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])+len(Sv[12])), Sv[12][:,0], 'ko')
+
+
+plt.figure,
+plt.subplot(2,2,1)
+plt.plot(depth_[depth_<=(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])+len(Pv[12]))], vp_[depth_<= (len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])+len(Pv[12]))], 'r')
+plt.subplot(2,2,2)
+plt.plot(depth_[depth_<=(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])+len(Sv[12]))], vs_[depth_<= (len(Sv[0])+len(Pv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])+len(Sv[12]))], 'k')
+plt.subplot(2,2,3)
+plt.plot(range(len(Pv[0])), Pv[0][:,0], 'ro')
+plt.plot(range(len(Pv[0]),len(Pv[0])+len(Pv[1])), Pv[1][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1]), len(Pv[0])+len(Pv[1])+len(Pv[2])), Pv[2][:,0], 'ro')
+plt.plot(range( len(Pv[0])+len(Pv[1])+len(Pv[2]),  len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])), Pv[3][:,0], 'ro')
+plt.plot(range( len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])), Pv[4][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])), Pv[5][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])), Pv[6][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])), Pv[7][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])), Pv[8][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])), Pv[9][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])), Pv[10][:,0], 'ro')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])), Pv[11][:,0], 'ro')
+#plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])+len(Pv[9])+len(Pv[10])+len(Pv[11])+len(Pv[12])),  Pv[12][:,0], 'ro')                                                                                                                                                                                                                                                                                                                         , 'ro')
+plt.subplot(2,2,4)
+plt.plot(range(len(Sv[0])), Sv[0][:,0], 'ko')
+plt.plot(range(len(Sv[0]),len(Sv[0])+len(Sv[1])), Sv[1][:,0], 'ko')
+plt.plot(range(len(Sv[0])+len(Sv[1]), len(Sv[0])+len(Sv[1])+len(Sv[2])), Sv[2][:,0], 'ko')
+plt.plot(range( len(Sv[0])+len(Sv[1])+len(Sv[2]),  len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])), Sv[3][:,0], 'ko')
+plt.plot(range( len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])), Sv[4][:,0], 'ko')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])), Sv[5][:,0], 'ko')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])), Sv[6][:,0], 'ko')
+plt.plot(range(len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6]), len(Pv[0])+len(Pv[1])+len(Pv[2])+len(Pv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])), Sv[7][:,0], 'ko')
+plt.plot(range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Pv[4])+len(Pv[5])+len(Pv[6])+len(Pv[7])+len(Pv[8])), Sv[8][:,0], 'ko')
+plt.plot(range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])), Sv[9][:,0], 'ko')
+plt.plot(range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])), Sv[10][:,0], 'ko')
+plt.plot(range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])), Sv[11][:,0], 'ko')
+#plt.plot(range(len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11]), len(Sv[0])+len(Sv[1])+len(Sv[2])+len(Sv[3])+len(Sv[4])+len(Sv[5])+len(Sv[6])+len(Sv[7])+len(Sv[8])+len(Sv[9])+len(Sv[10])+len(Sv[11])+len(Sv[12])), Sv[12][:,0], 'ko')
+
+
+
+
+#beam forming

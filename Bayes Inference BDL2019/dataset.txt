@@ -1,0 +1,87 @@
+ncdump DNA09_percent.nc
+
+ netcdf DNA09_percent {
+dimensions:
+        depth = 41 ;
+        longitude = 106 ;
+        latitude = 86 ;
+variables:
+        float latitude(latitude) ;
+                latitude:long_name = "Latitude; positive north" ;
+                latitude:units = "degrees_north" ;
+                latitude:standard_name = "latitude" ;
+        float longitude(longitude) ;
+                longitude:long_name = "Longitude; positive east" ;
+                longitude:units = "degrees_east" ;
+                longitude:standard_name = "longitude" ;
+        float depth(depth) ;
+                depth:long_name = "depth below earth surface" ;
+                depth:units = "km" ;
+                depth:positive = "down" ;
+        float dvs(depth, latitude, longitude) ;
+                dvs:long_name = "Shear Velocity Perturbation" ;
+                dvs:display_name = "Shear Velocity  Perturbation (%)" ;
+                dvs:missing_value = 99999.f ;
+                dvs:_FillValue = 99999.f ;
+        float dvp(depth, latitude, longitude) ;
+                dvp:long_name = "P-wave Velocity Perturbation" ;
+                dvp:display_name = "P-wave Velocity  Perturbation (%)" ;
+                dvp:missing_value = 99999.f ;
+                dvp:_FillValue = 99999.f ;
+
+// global attributes:
+                :title = "Finite-frequency P- and S-velocity models for the western US" ;
+                :id = "DNA09_percent" ;
+                :summary = "DNA09 is a 3-D model of shear wave (S) and compressional wave ...
+                        "" ;
+                :keywords = "seismic, tomography, shear wave, s wave, elsatic waveform, p wave, compressional wave " ;
+                :Conventions = "CF-1.0" ;
+                .
+                .
+                .
+                :geospatial_vertical_max = "1000" ;
+                :geospatial_vertical_units = "km" ;
+                :geospatial_vertical_positive = "down" ;
+data:
+
+ latitude = 32, 32.2, 32.4, 32.6, 32.8, 33, 33.2, 33.4, 33.6, 33.8, 34, 34.2,
+    34.4, 34.6, 34.8, 35, 35.2, 35.4, 35.6, 35.8, 36, 36.2, 36.4, 36.6, 36.8,
+    37, 37.2, 37.4, 37.6, 37.8, 38, 38.2, 38.4, 38.6, 38.8, 39, 39.2, 39.4,
+    39.6, 39.8, 40, 40.2, 40.4, 40.6, 40.8, 41, 41.2, 41.4, 41.6, 41.8, 42,
+    42.2, 42.4, 42.6, 42.8, 43, 43.2, 43.4, 43.6, 43.8, 44, 44.2, 44.4, 44.6,
+    44.8, 45, 45.2, 45.4, 45.6, 45.8, 46, 46.2, 46.4, 46.6, 46.8, 47, 47.2,
+    47.4, 47.6, 47.8, 48, 48.2, 48.4, 48.6, 48.8, 49 ;
+
+ longitude = -125, -124.8, -124.6, -124.4, -124.2, -124, -123.8, -123.6,
+    -123.4, -123.2, -123, -122.8, -122.6, -122.4, -122.2, -122, -121.8,
+    -121.6, -121.4, -121.2, -121, -120.8, -120.6, -120.4, -120.2, -120,
+    -119.8, -119.6, -119.4, -119.2, -119, -118.8, -118.6, -118.4, -118.2,
+    -118, -117.8, -117.6, -117.4, -117.2, -117, -116.8, -116.6, -116.4,
+    -116.2, -116, -115.8, -115.6, -115.4, -115.2, -115, -114.8, -114.6,
+    -114.4, -114.2, -114, -113.8, -113.6, -113.4, -113.2, -113, -112.8,
+    -112.6, -112.4, -112.2, -112, -111.8, -111.6, -111.4, -111.2, -111,
+    -110.8, -110.6, -110.4, -110.2, -110, -109.8, -109.6, -109.4, -109.2,
+    -109, -108.8, -108.6, -108.4, -108.2, -108, -107.8, -107.6, -107.4,
+    -107.2, -107, -106.8, -106.6, -106.4, -106.2, -106, -105.8, -105.6,
+    -105.4, -105.2, -105, -104.8, -104.6, -104.4, -104.2, -104 ;
+
+ depth = 0, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325,
+    350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675,
+    700, 725, 750, 775, 800, 825, 850, 875, 900, 925, 950, 975, 1000 ;
+
+ dvs =
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.001, 0.001, -0.001, -0.003, -0.004,
+    -0.003, -0.001, 0, 0.001, 0.002, 0.004, 0.006, 0.011, 0.022, 0.033,
+    0.025, 0.007, -0.009, -0.033, -0.057, -0.057, -0.009, 0.035, 0.034,
+    0.011, -0.011, 0.007, 0.024, -0.054, -0.302, -0.536, -0.495, -0.342,
+    -0.19, 0.001, 0.181, 0.242, 0.136, 0.034, 0.03, 0.058, 0.08, 0.042,
+    0.005, -0.006, 0.012, 0.029, -0.127, -0.326, -0.484, -0.394, -0.305,
+    -0.128, 0.136, 0.4, 0.018, -0.477, -0.847, -0.731, -0.62, -0.554, -0.521,
+    -0.487, -0.243, 0.018, 0.239, 0.349, 0.444, 0.481, 0.491, 0.508, 0.188,
+    -0.127, -0.268, -0.047, 0.179, 0.366, 0.528, 0.688, 0.53, 0.361, 0.238,
+    0.219, 0.203, -0.007, -0.321, -0.639, -0.406, -0.161, -0.095, -0.304,
+    -0.485, -0.513, -0.48, -0.426,
+   .
+   .
+   .
+}
