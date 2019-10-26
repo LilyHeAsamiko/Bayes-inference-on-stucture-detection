@@ -162,9 +162,6 @@ if prop = 'R':
             break
         
         r = np.sqrt(xy**2+xx**2)
-        alpha = -np.log(y/r**0.5)/xz
-        AL = r**(-0.5)*exp(-alpha*xz)
-        X,Y = np.meshgrid(xx,xy)
        
         plt.figure(),
         plt.subplot(211)
@@ -1533,7 +1530,7 @@ import scipy.special as sps
 import pandas as pd
 from obspy.signal.trigger import ar_pick
 from obspy.signal.tf_misfit import plot_tf_misfits
-
+from mpl_toolkits.mplot3d import Axes3D 
 
 
 #st = read('http://examples.obspy.org/RJOB_061005_072159.ehz.new')
@@ -1613,6 +1610,76 @@ plt.show()
 p, s = ar_pick(datasetz, datasetn, datasete, fs,
                          1.0, 20.0, 1.0, 0.1, 4.0, 1.0, 2, 8, 0.1, 0.2)
 
+#Christoffel matrix
+C =  [[9, 3.6, 2.25, 0, 0, 0],[3.6, 9.84, 2.4, 0, 0, 0],[2.25, 2.4, 5.9375, 0, 0, 0],[0, 0, 0, 2, 0, 0],[0, 0, 0, 2, 0, 0], [0, 0, 0, 0, 1.6, 0, 0],[0, 0, 0, 0, 0, 0, 2.181]]
+
+R = 2
+#theta = np.linspace(0,np.pi/2, 50)
+theta = np.linspace(0,np.pi/2, 50)
+phi = np.linspace(0,np.pi/2, 50)
+
+n1 = R*np.sin(phi)*np.cos(theta)
+n2 = R*np.sin(phi)*np.sin(theta)
+n3 = R*np.cos(phi)
+
+G11 = C[0][0]*n1**2+C[5][5]*n2**2+C[4][4]*n3**2+2*C[0][5]*n1*n2+2*C[0][4]*n1*n3+2*C[4][5]*n2*n3
+G22 = C[5][5]*n1**2+C[1][1]*n2**2+C[3][3]*n3**2+2*C[1][5]*n1*n2+2*C[3][5]*n1*n3+2*C[1][3]*n2*n3
+G33 = C[4][4]*n1**2+C[3][3]*n2**2+C[2][2]*n3**2+2*C[3][4]*n1*n2+2*C[2][4]*n1*n3+2*C[2][3]*n2*n3
+G12 = C[0][5]*n1**2+C[1][5]*n2**2+C[3][4]*n3**2+(C[0][1]+C[5][5])*n1*n2+(C[0][4]+C[4][5])*n1*n3+(C[1][4]+C[4][5])*n2*n3
+G13 = C[0][4]*n1**2+C[3][5]*n2**2+C[2][4]*n3**2+(C[0][3]+C[4][5])*n1*n2+(C[0][2]+C[4][4])*n1*n3+(C[2][5]+C[3][4])*n2*n3
+G23 = C[4][5]*n1**2+C[1][3]*n2**2+C[2][3]*n3**2+(C[3][5] + C[1][4])*n1*n2+(C[3][4]+C[2][5])*n1*n3+(C[1][2]+C[3][3])*n2*n3
+
+a = -(G11 + G22 +G33)
+b = G11*G22 + G11*G33 + G22*G33 -G12**2 -G13**2 -G23**2
+c = G11*G23**2 + G22*G13**2 + G33*G12**2 -G11*G22*G33 -2*G12*G13*G23 
+q = 2*(a/3)**3 -a*b/3 +c
+d = -a**2/3 +b
+f = np.arccos(-q/(2*((-d/3)**3)**0.5))
+
+vsv2 = np.array(2*(-d/3)**0.5*np.cos(f/3+2*np.pi/3)-a/3)
+vsh2 = np.array(2*(-d/3)**0.5*np.cos(f/3+4*np.pi/3)-a/3)
+vsp2 = vsv2/(1-f/(2*np.pi)+0.000001) 
+vR = (vsv2+vsp2)**0.5
+
+
+Theta, Phi= np.meshgrid(theta, phi)
+X,Y = np.meshgrid(n1, n2)
+X,Y,Z = np.meshgrid(n1, n2, n3)
+Z,VR = np.meshgrid(n3, vR**0.5)
+Z,VLove = np.meshgrid(n3, vsh2**0.5)
+
+fig = plt.figure()
+ax = fig.add_subplot(211, projection = '3d')
+ax.plot_surface(X, Y, abs(R**2-X**2-Y**2)**0.5, norm = vR**0.5)
+ax.set_title('Raylei wave speed')
+ax = fig.add_subplot(212, projection = '3d')
+ax.plot_surface(X, Y, abs(R**2-X**2-Y**2)**0.5, norm = vsh2**0.5)
+ax.set_title('Love wave speed')
+set_aspect = 'auto'
+plt.tight_layout
+
+plt.figure()
+plt.subplot(211)
+plt.streamplot(Theta, Phi, Z, VR, color = Z)
+plt.xlabel('longitude theta')
+plt.ylabel('latitude phi')
+plt.title('Raylei wave')
+hspace = 0.7
+plt.subplot(212)
+plt.streamplot(Theta, Phi, Z, VLove, color = Z)
+plt.title('Love wave')
+plt.xlabel('longitude theta')
+plt.ylabel('latitude phi')
+
+set_aspect = 'auto'
+plt.tight_layout()
+
+#lb = np.array(vR**0.5-np.mean(vR**0.5))
+#plt.figure(),
+#vps = plt.contour(np.array(abs(R**2-X**2-Y**2)**0.5, dtype = float), levels = np.linspace(1.7, 1.9, 10),coors = 'k')
+#plt.clabel(lb, fmt = '%.2f', inline = True)
+#plt.colorbar()
+#plt.title('countor')
 
 #plt.figure,
 #plt.subplot(411)
@@ -1852,12 +1919,68 @@ r[range(6368-6368, 6371-6368), 12] = rocean
 ri = np.array(np.linspace(12, 8, 5), dtype = 'int')# 9.LVZ, 10.LID, 11.Crust, 12.Ocean 
 ri_ = np.array(np.linspace(12, 0, 13), dtype = 'int')# 9.LVZ, 10.LID, 11.Crust, 12.Ocean 
 
-SAW642ANB = pd.read_csv('D:/TUT/Medical/biophysics/experiment/bayes/Bayes/Bayes Inference/samples/SAW642ANB_kmps.csv', sep = '|',header =1, skiprows = 67)
+SAW642ANB = pd.read_csv('D:/TUT/Medical/biophysics/experiment/bayes/Bayes/Bayes Inference/samples/SAW642ANB_kmps.csv', sep = '|',lineterminator = ',', header =1, skiprows = 67)
 data = np.array(SAW642ANB)
-rho_ = data[data[:,1]==0, 5]
-depth_ = data[data[:,1]==0, 2]
-vs_= data[data[:,1]==0, 3]
-vp_= data[data[:,1]==0, 4]
+#rho_ = data[data[:,1]==0, 5]
+#depth_ = data[data[:,1]==0, 2]
+#vs_= data[data[:,1]==0, 3]
+#vp_= data[data[:,1]==0, 4]
+#Q_ = data[data[:,1]==0, 6]
+#latitude_ = data[data[:,1]==0, 0]
+#longtitude_ = data[data[:,1]==0, 1]
+# z = 100, latitude: -10-25, lonitude: 
+rho_ = data[data[:,2]==100, 5]
+depth_ = data[data[:,2]==100, 2]
+vs_= data[data[:,2]==100, 3]
+vp_= data[data[:,2]==100, 4]
+Q_ = data[data[:,2]==100, 6]
+latitude_ = data[data[:,2]==100, 0]
+longtitude_ = data[data[:,2]==100, 1]
+
+rho_1 = np.array(rho_[(-10 < latitude_) &  (latitude_ <25)], dtype = float)
+vs_1 = np.array(vs_[(-10 < latitude_) &  (latitude_ <25)], dtype = float)
+vp_1 = np.array(vp_[(-10 < latitude_) &  (latitude_ <25)], dtype = float)
+#Q_1 = np.array(Q_[(100 < latitude_) &  (latitude_ <116)], dtype = float)
+latitude_1 = np.array(latitude_[(-10 < latitude_) &  (latitude_ <25)], dtype = float)
+longtitude_1 = np.array(longtitude_[(-10 < latitude_) &  (latitude_ <25)], dtype = float)
+
+rho_2 = np.array(rho_1[(105 < longtitude_1) &  (longtitude_1 <120)], dtype = float)
+vs_2 = np.array(vs_1[(105 < longtitude_1) &  (longtitude_1 <120)], dtype = float)
+vp_2 = np.array(vp_1[(105 < longtitude_1) &  (longtitude_1 <120)], dtype = float)
+#Q_1 = np.array(Q_[(100 < latitude_) &  (latitude_ <116)], dtype = float)
+latitude_2 = np.array(latitude_1[(105 < longtitude_1) &  (longtitude_1 <120)], dtype = float)
+longtitude_2 = np.array(longtitude_1[(105 < longtitude_1) &  (longtitude_1 <120)], dtype = float)
+
+
+plt.figure(),
+XX,YY = np.meshgrid(vp_2, vs_2)
+ZZ = XX/YY
+
+plt.pcolor(XX,YY,ZZ)
+plt.colorbar()
+#plt.xticks(XX, labels = np.array(np.linspace(longtitude_2[0], longtitude_2[-1], 5)), dtype = str)
+plt.xticks(XX[0,:], labels = np.array(np.linspace(longtitude_2[0], longtitude_2[-1], 2, dtype = int)))
+plt.yticks(YY[:,0], labels = np.array(np.linspace(latitude_2[0], latitude_2[-1], 4, dtype = int)))
+plt.title('vp/vs')
+
+plt.figure(),
+vps = plt.contour(ZZ, levels = np.linspace(1.7, 1.9, 10),coors = 'k')
+plt.clabel(vps, fmt = '%.2f', inline = True)
+plt.xticks(XX[0,:], labels = np.array(np.linspace(longtitude_2[0], longtitude_2[-1], 2, dtype = int)))
+plt.yticks(YY[:,0], labels = np.array(np.linspace(latitude_2[0], latitude_2[-1], 2, dtype = int)))
+plt.colorbar()
+plt.title('countor')
+
+plt.show()
+
+z = vp_2/vs_2
+
+plt.contour()
+plt.tricontour(vp_2, vs_2, vp_2/vs_2)
+
+plt.x()
+
+
 Pv, Sv, dw2w2, RR, EE = v_rho_r(ri_, r, u, du, v, dv, w, vp_, vs_, a, l)
 plt.figure,
 plt.subplot(2,2,1)
